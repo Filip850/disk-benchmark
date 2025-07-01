@@ -34,7 +34,7 @@ echo "Starting disk benchmark with $NUMBER_OF_TESTS runs per test..."
 echo "Test file size: $FILE_SIZE"
 echo
 
-# Run fio test with fallback parsing
+# Run fio test with text parsing
 run_fio_test() {
   local fio_rw=$1
   local blocksize=$2
@@ -42,45 +42,11 @@ run_fio_test() {
 
   # Run fio and capture output
   local fio_out
-  if fio_out=$(fio --name=test --filename=$TEST_FILE --size=$FILE_SIZE --direct=1 --rw=$fio_rw --bs=$blocksize --numjobs=1 --iodepth=16 --runtime=30 --time_based --group_reporting --output-format=json 2>&1); then
-    # JSON parsing
-    if echo "$fio_out" | grep -q '{'; then
-      # Extract metrics using text processing (for compatibility with older fio versions)
-      local read_metric write_metric
-      if [[ "$fio_rw" == "read" || "$fio_rw" == "randread" ]]; then
-        read_metric=$(echo "$fio_out" | grep -A1 '"read" :' | grep -E 'bw \([0-9]' | awk -F '[,=]' '{print $3}' | grep -oE '[0-9.]+')
-        iops=$(echo "$fio_out" | grep -A1 '"read" :' | grep -E 'iops' | awk -F '[,=]' '{print $3}' | grep -oE '[0-9.]+')
-      else
-        write_metric=$(echo "$fio_out" | grep -A1 '"write" :' | grep -E 'bw \([0-9]' | awk -F '[,=]' '{print $3}' | grep -oE '[0-9.]+')
-        iops=$(echo "$fio_out" | grep -A1 '"write" :' | grep -E 'iops' | awk -F '[,=]' '{print $3}' | grep -oE '[0-9.]+')
-      fi
-      
-      # Determine the bandwidth value to use
-      local bw_val
-      if [[ -n "$read_metric" ]]; then
-        bw_val=$read_metric
-      else
-        bw_val=$write_metric
-      fi
-      
-      # Convert bw to MB/s
-      local bw_unit=$(echo "$fio_out" | grep 'bw (' | awk '{print $2}' | tr -d ')')
-      if [[ "$bw_unit" == "KiB/s" ]]; then
-        mbps=$(echo "scale=2; $bw_val / 1024" | bc)
-      else  # Assume MiB/s
-        mbps=$bw_val
-      fi
-      
-      # Get latency (skip if not available)
-      lat_ms=0
-    else
-      # Fallback to text parsing
-      parse_text_output "$fio_out" "$fio_rw"
-    fi
-  else
-    # Fallback to text parsing
-    parse_text_output "$fio_out" "$fio_rw"
-  fi
+  fio_out=$(fio --name=test --filename=$TEST_FILE --size=$FILE_SIZE --direct=1 --rw=$fio_rw --bs=$blocksize \
+                --numjobs=1 --iodepth=16 --runtime=30 --time_based --group_reporting --output-format=normal 2>&1)
+
+  # Parse output
+  parse_text_output "$fio_out" "$fio_rw"
 
   echo "$mbps $iops $lat_ms"
 }
@@ -90,36 +56,35 @@ parse_text_output() {
   local fio_out="$1"
   local fio_rw="$2"
   
-  # Find relevant line
+  # Find aggregate bandwidth line
   local bw_line
-  if [[ "$fio_rw" == "read" || "$fio_rw" == "randread" ]]; then
-    bw_line=$(echo "$fio_out" | grep -m1 "read:")
-  else
-    bw_line=$(echo "$fio_out" | grep -m1 "write:")
+  bw_line=$(echo "$fio_out" | grep -i -m1 "agg.*bw=")
+  
+  # Fallback to any bw= line if aggregate not found
+  if [ -z "$bw_line" ]; then
+    bw_line=$(echo "$fio_out" | grep -i -m1 "bw=")
   fi
 
-  # Extract bandwidth
-  if [[ $bw_line =~ [bB][wW]=([0-9.]+)([KkMm]) ]]; then
+  # Extract bandwidth value and unit
+  if [[ $bw_line =~ [bB][wW]=([0-9.]+)([KkMm]?i?B?)/s ]]; then
     local bw_val=${BASH_REMATCH[1]}
-    local unit=${BASH_REMATCH[2],,}  # Convert to lowercase
+    local unit=$(echo "${BASH_REMATCH[2]}" | tr '[:upper:]' '[:lower:]')
     
-    if [[ "$unit" == "k" ]]; then
+    # Convert to MB/s
+    if [[ "$unit" =~ k ]]; then
       mbps=$(echo "scale=2; $bw_val / 1024" | bc)
+    elif [[ "$unit" =~ m ]]; then
+      mbps=$bw_val
     else
+      # Default to MB/s if no unit matched
       mbps=$bw_val
     fi
   else
     mbps=0
   fi
 
-  # Extract IOPS
-  if [[ $bw_line =~ [iI][oO][pP][sS]=([0-9]+) ]]; then
-    iops=${BASH_REMATCH[1]}
-  else
-    iops=0
-  fi
-
-  # Latency not available in text mode
+  # Not used in final report but kept for structure
+  iops=0
   lat_ms=0
 }
 
@@ -133,11 +98,15 @@ stddev() {
        END { if (count > 0) { mean = sum/count; print sqrt(sumsq/count - mean^2) } else print 0 }'
 }
 
-# Create test file if needed
-if [[ ! -f "$TEST_FILE" ]]; then
-  echo "Creating test file..."
-  touch "$TEST_FILE"
+# Create test file with random data
+echo "Creating test file with random data..."
+if [ -f "$TEST_FILE" ]; then
+  rm -f "$TEST_FILE"
 fi
+
+# Preallocate test file
+fio --name=init --filename="$TEST_FILE" --size="$FILE_SIZE" --rw=write --bs=1M \
+    --direct=1 --numjobs=1 --iodepth=16 --end_fsync=1 --output-format=normal >/dev/null
 
 echo "Running tests, please wait..."
 

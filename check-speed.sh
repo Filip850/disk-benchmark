@@ -5,7 +5,7 @@ set -e
 # Defaults
 NUMBER_OF_TESTS=3
 FILE_SIZE=1G
-TEST_FILE="/tmp/fio_testfile"
+TEST_FILE="fio_testfile"  # Created in the current working directory
 LOG_DIR="./"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 LOG_FILE="$LOG_DIR/disk_benchmark_$TIMESTAMP.log"
@@ -32,6 +32,7 @@ install_if_missing bc
 
 echo "Starting disk benchmark with $NUMBER_OF_TESTS runs per test..."
 echo "Test file size: $FILE_SIZE"
+echo "Test file location: $TEST_FILE (in current directory: $(pwd))"
 echo
 
 # Run fio test with text parsing
@@ -98,8 +99,8 @@ stddev() {
        END { if (count > 0) { mean = sum/count; print sqrt(sumsq/count - mean^2) } else print 0 }'
 }
 
-# Create test file with random data
-echo "Creating test file with random data..."
+# Create test file with random data in the current directory
+echo "Creating test file with random data in $(pwd)..."
 if [ -f "$TEST_FILE" ]; then
   rm -f "$TEST_FILE"
 fi
@@ -146,7 +147,8 @@ std_write_rand=$(printf "%s\n" "${results_write_rand[@]}" | stddev)
 # Log results
 {
   echo "Disk Benchmark Report - $(date)"
-  echo "Test file: $TEST_FILE ($FILE_SIZE)"
+  echo "Test file: $TEST_FILE (in $(pwd))"
+  echo "Test file size: $FILE_SIZE"
   echo "Number of test runs: $NUMBER_OF_TESTS"
   echo
   printf "%-20s %-15s %-15s\n" "Test" "Read MB/s ± stddev" "Write MB/s ± stddev"

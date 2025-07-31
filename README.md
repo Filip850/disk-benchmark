@@ -1,10 +1,10 @@
 To use disk checker.:
 
-```
+```sh
 curl https://raw.githubusercontent.com/Filip850/disk-benchmark/refs/heads/main/check-speed.sh | bash
 ```
 
-if you have no curl installed... just install it lol :>
+if you don't have curl installed... just install it lol :>
 
 Script checks is fio installed - if no - it will install it automaticly. (so it would be better to use sudo with it :>)
 

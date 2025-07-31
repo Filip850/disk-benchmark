@@ -32,7 +32,6 @@ install_if_missing bc
 
 echo "Starting disk benchmark with $NUMBER_OF_TESTS runs per test..."
 echo "Test file size: $FILE_SIZE"
-echo "Test file location: $TEST_FILE (in current directory: $(pwd))"
 echo
 
 # Run fio test with text parsing
@@ -43,13 +42,16 @@ run_fio_test() {
 
   # Run fio and capture output
   local fio_out
-  fio_out=$(fio --name=test --filename=$TEST_FILE --size=$FILE_SIZE --direct=1 --rw=$fio_rw --bs=$blocksize \
+  local test_file="${TEST_FILE}_${fio_rw}_${blocksize}_$RANDOM"
+
+  fio_out=$(fio --name=test --filename=$test_file --size=$FILE_SIZE --direct=1 --rw=$fio_rw --bs=$blocksize \
               --numjobs=8 --iodepth=64 --runtime=30 --time_based --group_reporting --output-format=normal 2>&1)
 
   # Parse output
   parse_text_output "$fio_out" "$fio_rw"
 
   echo "$mbps $iops $lat_ms"
+  rm -f "$test_file"
 }
 
 # Parse fio text output

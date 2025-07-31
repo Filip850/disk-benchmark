@@ -59,11 +59,10 @@ run_fio_test() {
   rm -f "$test_file"
 }
 
-# Parse fio text output
 parse_text_output() {
   local fio_out="$1"
   local fio_rw="$2"
-  
+
   local bw_line
   bw_line=$(echo "$fio_out" | grep -i -m1 "agg.*bw=")
 
@@ -71,17 +70,24 @@ parse_text_output() {
     bw_line=$(echo "$fio_out" | grep -i -m1 "bw=")
   fi
 
-  if [[ $bw_line =~ [bB][wW]=([0-9.]+)([KkMm]?i?B?)/s ]]; then
+  if [[ $bw_line =~ [bB][wW]=([0-9.]+)([KkMmGg]?i?[bB]?)/s ]]; then
     local bw_val=${BASH_REMATCH[1]}
     local unit=$(echo "${BASH_REMATCH[2]}" | tr '[:upper:]' '[:lower:]')
-    
-    if [[ "$unit" =~ k ]]; then
-      mbps=$(echo "scale=2; $bw_val / 1024" | bc)
-    elif [[ "$unit" =~ m ]]; then
-      mbps=$bw_val
-    else
-      mbps=$bw_val
-    fi
+
+    case "$unit" in
+      kib | kb)
+        mbps=$(echo "scale=2; $bw_val / 1024" | bc)
+        ;;
+      mib | mb)
+        mbps=$bw_val
+        ;;
+      gib | gb)
+        mbps=$(echo "scale=2; $bw_val * 1024" | bc)
+        ;;
+      *)
+        mbps=$bw_val
+        ;;
+    esac
   else
     echo "Warning: Failed to parse bandwidth for $fio_rw" >&2
     echo "$fio_out" >&2
@@ -91,6 +97,7 @@ parse_text_output() {
   iops=0
   lat_ms=0
 }
+
 
 # Statistics helpers
 mean() {

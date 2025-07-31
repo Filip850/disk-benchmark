@@ -43,7 +43,7 @@ run_fio_test() {
 
   # Run fio and capture output
   local fio_out
-fio_out=$(fio --name=test --filename=$TEST_FILE --size=$FILE_SIZE --direct=1 --rw=$fio_rw --bs=$blocksize \
+  fio_out=$(fio --name=test --filename=$TEST_FILE --size=$FILE_SIZE --direct=1 --rw=$fio_rw --bs=$blocksize \
               --numjobs=8 --iodepth=64 --runtime=30 --time_based --group_reporting --output-format=normal 2>&1)
 
   # Parse output
